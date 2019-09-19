@@ -2,7 +2,9 @@
 title: "Assignment 2 - Language Development in ASD - Making predictions"
 author: "Riccardo Fusaroli"
 date: "August 9, 2019"
-output: html_document
+output: 
+  md_document:
+    variant: markdown_github
 ---
 
 ```{r setup, include=FALSE}
@@ -49,7 +51,9 @@ How did your models from last time perform? In this exercise you have to compare
 
 pacman::p_load(readr,dplyr,stringr,lmerTest,Metrics,caret)
 
+
 ## Clean up function, included to inspire you
+
 
 CleanUpData <- function(Demo,LU,Word){
   
@@ -99,19 +103,35 @@ CleanUpData <- function(Demo,LU,Word){
 }
 
 # Load training Data
+demo_train <- read.csv("demo_train.csv")
+token_train <- read.csv("token_train.csv")
+LU_train <- read.csv("LU_train.csv")
 
+#clean data and make subset without NA's for CHI_MLU
+train_data1 <- CleanUpData(Demo = demo_train, LU = LU_train, Word = token_train)
+train_data <- subset(train_data1, !is.na(CHI_MLU))
 
 #- recreate the models you chose last time (just write the code again and apply it to Train Data)
-
+model <- lmer(CHI_MLU ~ Diagnosis * Visit * verbalIQ1 + MOT_MLU * verbalIQ1 + (1 + Visit | Child.ID), data = train_data)
 
 #- calculate performance of the model on the training data: root mean square error is a good measure. (Tip: google the function rmse())
 
-
+rmse(train_data$CHI_MLU, predict(model, train_data)) #calculates how wrong (on average) we expect to be (low values are good!) = 0.34
 
 #- create the test dataset (apply the code from assignment 1 or my function to clean up the 3 test datasets)
 # Test data
+#load test-data
+demo_test <- read.csv("demo_test.csv")
+token_test <- read.csv("token_test.csv")
+LU_test <- read.csv("LU_test.csv")
+
+#clean data and make a subset where there are no NA's for CHI_MLU
+test_data1 <- CleanUpData(Demo = demo_test, LU = LU_test, Word = token_test)
+test_data <- subset(test_data1, !is.na(CHI_MLU))
+
 
 #- test the performance of the models on the test data (Tips: google the functions "predict()")
+rmse(test_data$CHI_MLU, predict(model, test_data, allow.new.levels = TRUE)) #0.49
 
 
 #- optional: predictions are never certain, can you identify the uncertainty of the predictions? (e.g. google predictinterval())
@@ -138,12 +158,14 @@ In this exercise you have to use cross-validation to calculate the predictive er
 
 ```{r}
 #- Create the basic model of ChildMLU as a function of Time and Diagnosis (don't forget the random effects!).
+basic_model <- lmer(CHI_MLU ~ Visit * Diagnosis + (1 + Visit | Child.ID), data = train_data)
 
-#- Make a cross-validated version of the model. (Tips: google the function "createFolds";  loop through each fold, train a model on the other folds and test it on the fold)
+
+#- Make a cross-validated version of the model. (Tips: google the function "createFolds";  loop through each fold, train a model on the other folds and test it on the fold) 
 
 #- Report the results and comment on them. 
 
-#- Now try to find the best possible predictive model of ChildMLU, that is, the one that produces the best cross-validated results.
+#- Now try to find the best possible predictive model of ChildMLU, that is, the one that produces the best cross-validated results.- CVMS - Ludvig (on GitHub)
 
 # Bonus Question 1: What is the effect of changing the number of folds? Can you plot RMSE as a function of number of folds?
 # Bonus Question 2: compare the cross-validated predictive error against the actual predictive error on the test data

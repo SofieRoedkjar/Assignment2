@@ -2,7 +2,9 @@
 title: "Assignment 2 - Language Development in ASD - Part 1 - Explaining development"
 author: "[YOUR NAME]"
 date: "[DATE]"
-output: html_document
+output: 
+  md_document:
+    variant: markdown_github
 ---
     
 ```{r setup, include=FALSE}
@@ -75,7 +77,8 @@ Load necessary libraries : what will you need?
 - e.g. something to plot with
 
 ```{r Load Libraries, include = FALSE}
-
+library(pacman)
+p_load(tidyverse, ggplot2, lme4, MuMIn, afex)
 ```
 
 ### Define your working directory and load the data
@@ -88,7 +91,7 @@ If you opened this Rmd file outside of a project, you will need some code to fin
 - Load the data you saved last time (use read_csv(fileName))
 
 ```{r Load Data, include = FALSE}
-
+df <- read.csv("Assignment1_df.csv")
 ```
 
 ### Characterize the participants (Exercise 1)
@@ -100,6 +103,36 @@ Make sure the variables are in the right format.
 Describe the characteristics of the two groups of participants and whether the two groups are well matched.
 
 ```{r descriptive stats, include = FALSE}
+
+# 86.2% boys with ASD
+(25/29)
+# 81.2 % boys with TD
+26/32
+
+
+visit1 <- subset(df, VISIT == "1") %>% group_by(Diagnosis) %>%
+  summarise (TotalNumber = n(), Girls = sum(Gender == "F"), Boys = sum(Gender == "M"), AgeMean = mean(Age, Na.RM = TRUE), AdosMean=mean(ADOS1), VerbalIQ = mean(verbalIQ), nonVerbalIQ = mean(nonVerbalIQ), Socialization = mean(Socialization), CHI_MLU = mean(CHI_MLU), MOT_MLU = mean(MOT_MLU), TokensChild = mean(tokens_CHI), TokensMother = mean(tokens_MOT), TypesChild=mean(types_CHI), TypesMother=mean(types_MOT))
+#making dataframe with the mean values
+
+visit1SD <- subset(df, VISIT == "1") %>% group_by(Diagnosis) %>%
+  summarise (TotalNumber = NA, Girls = NA, Boys = NA, AgeMean = sd(Age), AdosMean=sd(ADOS1), VerbalIQ = sd(verbalIQ), nonVerbalIQ = sd(nonVerbalIQ), Socialization = sd(Socialization), CHI_MLU = sd(CHI_MLU), MOT_MLU = sd(MOT_MLU), TokensChild = sd(tokens_CHI), TokensMother = sd(tokens_MOT), TypesChild=sd(types_CHI), TypesMother=sd(types_MOT))
+#making dataframe with the standard deviations
+
+
+#transopsing both dataframes
+transposedVisit1 <- t(visit1)
+transposedVisit1SD <- t(visit1SD)
+
+#binding the two dataframes together 
+totalframe <- cbind(transposedVisit1, transposedVisit1SD)
+totalframe <- as.data.frame(totalframe)
+
+#reordering the collumns so the ASD collumns are next to each other.. so putting the old collumn number 3 on collumn no 2's place now
+totalframe1 <- subset(totalframe, select=c(1, 3, 2, 4))
+
+#renaming the collumns
+names(totalframe1) <- c("Mean", "SD", "Mean", "SD")
+
 
 ```
 
@@ -118,13 +151,38 @@ Remember to plot the data first and then to run a statistical test.
 - Which variable(s) should be included as random factors?
 
 ```{r ex2, include = FALSE}
+#plotting the data
+ggplot(data = df, aes(x = VISIT, y = CHI_MLU, color = Diagnosis)) +
+  geom_point() +
+  geom_smooth(method = lm)
+
+#make 2 plots (one for TD and one for ASD)
+ggplot(data = df, aes(x = VISIT, y = CHI_MLU, colour = SUBJ, group = SUBJ)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = FALSE) + 
+  facet_wrap(.~Diagnosis)
+
+#making a model - using interaction effect, we assume that the slopes of the visits will vary according to diagnosis
+model1 <- lmer(CHI_MLU ~ Diagnosis * VISIT + (1 + VISIT | SUBJ), data = df) #Will not converge because the model is too complex
+model1 <- lmer(CHI_MLU ~ Diagnosis * VISIT + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df) #simplifying the model makes it converge
+
+#a "NULL-model" (without interaction effect)
+model0 <- lmer(CHI_MLU ~ Diagnosis + VISIT + (1 | SUBJ) +(0 + VISIT | SUBJ), data = df)
+
+null <- lmer(CHI_MLU ~ 1 + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+
 
 ```
 
 How would you evaluate whether the model is a good model?
 
 ```{r ex2 evaluate, include = FALSE}
+summary(model1)
 
+anova(null, model1) #comparing the model without interaction to the one with - with interaction explains more
+
+#calculate R^2
+MuMIn::r.squaredGLMM(model1)
 ```
 
 Not too good, right? Let's check whether a growth curve model is better.
@@ -138,6 +196,19 @@ First build the different models, then compare them to see which one is better.
 Exciting right? Let's check whether the model is doing an alright job at fitting the data. Plot the actual CHI_MLU data against the predictions of the model fitted(model). 
 
 ```{r}
+fitted <- fitted(model1)
+
+#plot of the data and our model
+df1 <- df
+df1$fitted <- fitted(model1)
+
+df1$SUBJ <- as.integer(df1$SUBJ)
+# # predicted versus actual, points are actual datapoints, lines are predictions for each subject
+ggplot(df1, aes(x = VISIT, y = CHI_MLU, group = SUBJ, color = SUBJ)) +
+  geom_point(alpha = 0.3, position = position_jitter(w = 0.1, h = 0)) +
+  facet_wrap(~SUBJ) +
+  theme_minimal() +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, aes(y=fitted))
 
 ```
 
@@ -155,6 +226,41 @@ Linguistic development of children MLU is affected by ... [COMPLETE]
 ### Hypothesis: Parental MLU changes: i) over time, ii) according to diagnosis
 
 ```{r ex3, include = FALSE}
+#plot, colored by Diagnosis
+ggplot(df, aes(x=VISIT, y=MOT_MLU, color = Diagnosis)) +
+  geom_point() +
+  geom_smooth(method = lm)
+
+
+#make 2 plots (one for TD and one for ASD)
+ggplot(data = df, aes(x = VISIT, y = MOT_MLU, colour = SUBJ, group = SUBJ)) + 
+  geom_point() + 
+  geom_smooth(method = lm, se = FALSE) + 
+  facet_wrap(.~Diagnosis)
+
+#make a model
+MOT_model1 <- lmer(MOT_MLU ~ Diagnosis * VISIT + (1 + VISIT | SUBJ), data = df)
+
+MOT_model0 <- lmer(MOT_MLU ~ Diagnosis + VISIT + (1 + VISIT | SUBJ), data = df)
+MOT_null <- lmer(MOT_MLU ~ 1 + (1 + VISIT | SUBJ), data = df)
+
+anova(MOT_null, MOT_model1) #Model1 is better
+
+summary(MOT_model1)
+
+#calculate R^2
+MuMIn::r.squaredGLMM(MOT_model1) #not particularly good
+
+
+#make a plot of all subjects and fit the model
+df2 <- df
+df2$fitted <- fitted(MOT_model1)
+# # predicted versus actual, points are actual datapoints, lines are predictions for each subject
+ggplot(df2, aes(x = VISIT, y = MOT_MLU, group = SUBJ, color = SUBJ)) +
+  geom_point(alpha = 0.3, position = position_jitter(w = 0.1, h = 0)) +
+  facet_wrap(~SUBJ) +
+  theme_minimal() +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, aes(y=fitted)) 
 
 ```
 
@@ -167,6 +273,67 @@ Your task now is to figure out how to best describe the children linguistic traj
 
 
 ```{r ex4, include = FALSE}
+#model1 that we used before
+model1 <- lmer(CHI_MLU ~ Diagnosis * VISIT + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+
+
+
+#add nonVerbalIQ
+model4 <- lmer(CHI_MLU ~ Diagnosis * VISIT + nonVerbalIQ1 + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model4) #0.46 and 0.81
+
+#add tripple interaction
+model5 <- lmer(CHI_MLU ~ Diagnosis * VISIT * nonVerbalIQ1 + verbalIQ1  + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model5) #0.62 and 0.81
+
+#no tripple interaction
+model6 <- lmer(CHI_MLU ~ Diagnosis * VISIT + nonVerbalIQ1 + verbalIQ1 + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model6) #0.60 and 0.80
+
+#add 2 interactions
+model7 <- lmer(CHI_MLU ~ Diagnosis * VISIT + nonVerbalIQ1 * verbalIQ1  + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model7) #0.60 and 0.80
+
+
+#add MOT_MLU
+model8 <- lmer(CHI_MLU ~ Diagnosis * VISIT * nonVerbalIQ1 * verbalIQ1  + MOT_MLU +(1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model8) #0.70 and 0.83
+
+
+#add MOT_MLU as interaction
+model9 <- lmer(CHI_MLU ~ Diagnosis * VISIT * MOT_MLU + nonVerbalIQ1 + verbalIQ1 + (1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model9) #0.70 and 0.83
+
+#add MOT_MLU
+model10 <- lmer(CHI_MLU ~ Diagnosis * VISIT + nonVerbalIQ1 + verbalIQ1  + MOT_MLU +(1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model10) #0.70 and 0.83
+
+#add MOT_MLU
+model11 <- lmer(CHI_MLU ~ Diagnosis * VISIT * verbalIQ1 * MOT_MLU  + nonVerbalIQ1 +(1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model11) #0.72 and 0.84
+
+
+model12 <- lmer(CHI_MLU ~ Diagnosis * VISIT + VISIT * verbalIQ1 + VISIT * ADOS1 +(1 | SUBJ) + (0 + VISIT | SUBJ), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model12) #0.65 and 0.81
+
+model13 <- lmer(CHI_MLU ~ Diagnosis * Visit * verbalIQ1 + MOT_MLU * verbalIQ1 +(1 + Visit | Child.), data = df)
+#calculate R^2
+MuMIn::r.squaredGLMM(model13) #0.72 and 0.84
+
+summary(model11)
+anova(model1, model4,model5, model6, model7, model8, model9, model10, model11)
+anova(model1, model11)
+
+####### model13 is the better model (better BIC)  - but very hard to interpret##########
 
 ```
 
