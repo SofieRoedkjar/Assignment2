@@ -325,13 +325,14 @@ model12 <- lmer(CHI_MLU ~ Diagnosis * VISIT + VISIT * verbalIQ1 + VISIT * ADOS1 
 #calculate R^2
 MuMIn::r.squaredGLMM(model12) #0.65 and 0.81
 
-model13 <- lmer(CHI_MLU ~ Diagnosis * Visit * verbalIQ1 + MOT_MLU * verbalIQ1 +(1 + Visit | Child.), data = df)
+
+model13 <- lmer(CHI_MLU ~ Diagnosis * VISIT * verbalIQ1 + MOT_MLU * verbalIQ1 +(1 + VISIT | SUBJ), data = df)
 #calculate R^2
 MuMIn::r.squaredGLMM(model13) #0.72 and 0.84
 
-summary(model11)
+summary(model13)
 anova(model1, model4,model5, model6, model7, model8, model9, model10, model11)
-anova(model1, model11)
+anova(null, model13)
 
 ####### model13 is the better model (better BIC)  - but very hard to interpret##########
 

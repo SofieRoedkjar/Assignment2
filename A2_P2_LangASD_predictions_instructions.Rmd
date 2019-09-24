@@ -129,6 +129,11 @@ LU_test <- read.csv("LU_test.csv")
 test_data1 <- CleanUpData(Demo = demo_test, LU = LU_test, Word = token_test)
 test_data <- subset(test_data1, !is.na(CHI_MLU))
 
+#rename the participants in test_data
+test_data$Child.ID <- as.factor(test_data$Child.ID)
+levels(test_data$Child.ID) <- c(66:71)
+
+
 
 #- test the performance of the models on the test data (Tips: google the functions "predict()")
 rmse(test_data$CHI_MLU, predict(model, test_data, allow.new.levels = TRUE)) #0.49
@@ -158,14 +163,77 @@ In this exercise you have to use cross-validation to calculate the predictive er
 
 ```{r}
 #- Create the basic model of ChildMLU as a function of Time and Diagnosis (don't forget the random effects!).
-basic_model <- lmer(CHI_MLU ~ Visit * Diagnosis + (1 + Visit | Child.ID), data = train_data)
+#combine the two data-sets
+all_data <- rbind(train_data, test_data)
+
+basic_model <- lmer(CHI_MLU ~ Visit + Diagnosis + (1 | Child.ID) + (0 + Visit | Child.ID), data = all_data)
 
 
 #- Make a cross-validated version of the model. (Tips: google the function "createFolds";  loop through each fold, train a model on the other folds and test it on the fold) 
 
+p_load(cvms, groupdata2, knitr, dplyr)
+
+# Set seed for reproducibility
+set.seed(7)
+
+# Fold data 
+fold_data <- groupdata2::fold(train_data, k = 5,
+             cat_col = 'Diagnosis',
+             id_col = 'Child.ID') %>% 
+  arrange(.folds)
+
+# Show first 15 rows of data
+fold_data %>% head(15) %>% kable()
+
+
+#cross-validate single model
+CV1 <- cross_validate(fold_data, "CHI_MLU ~ Visit + Diagnosis + (1 | Child.ID) + (0 + Visit | Child.ID)",
+                      fold_cols = '.folds',
+                      family = 'gaussian',
+                      REML = FALSE)
+
+# Results metrics
+CV1 %>% select_metrics() %>% kable()
+
+CV1 # RMSE = 0.85
+
+
+
+
 #- Report the results and comment on them. 
 
 #- Now try to find the best possible predictive model of ChildMLU, that is, the one that produces the best cross-validated results.- CVMS - Ludvig (on GitHub)
+mixed_models <- c("CHI_MLU ~ Visit + Diagnosis + (1 | Child.ID) + (0 + Visit | Child.ID)", 
+                  "CHI_MLU ~ Diagnosis * Visit + nonVerbalIQ1 + verbalIQ1  + MOT_MLU + (1 | Child.ID) + (0 + Visit | Child.ID)", 
+                  "CHI_MLU ~ Diagnosis * Visit * verbalIQ1 + MOT_MLU * verbalIQ1 + (1 | Child.ID) + (0 + Visit | Child.ID)", 
+                  "CHI_MLU ~ Diagnosis * Visit * Ados1 + MOT_MLU * Visit  + (1 | Child.ID) + (0 + Visit | Child.ID)", 
+                  "CHI_MLU ~ Diagnosis * Visit * Ados1 * verbalIQ1  + (1 | Child.ID) + (0 + Visit | Child.ID)",
+                  "CHI_MLU ~ Diagnosis * Visit  + MOT_MLU * verbalIQ1 + (1 | Child.ID) + (0 + Visit | Child.ID)", 
+                  "CHI_MLU ~ Diagnosis * Visit * verbalIQ1 + MOT_MLU * Visit  + (1 | Child.ID) + (0 + Visit | Child.ID)",
+                  "CHI_MLU ~ Diagnosis * Visit * Socialization1 + MOT_MLU * verbalIQ1  + (1 | Child.ID) + (0 + Visit | Child.ID)") 
+
+
+CV2 <- cross_validate(fold_data, mixed_models,
+                      fold_cols = '.folds',
+                      family = 'gaussian',
+                      REML = FALSE)
+
+CV2 %>% select_metrics() %>% kable()
+CV2
+
+
+#cross-validate the "best" model only
+THEmodel <- lmer(CHI_MLU ~ Diagnosis * Visit * verbalIQ1 + MOT_MLU * verbalIQ1 + (1 | Child.ID) + (0 + Visit | Child.ID), data = train_data)
+
+
+
+#- calculate performance of the cross-validated model on the test data: root mean square error is a good measure. (Tip: google the function rmse())
+
+rmse(test_data$CHI_MLU, predict(THEmodel, test_data, allow.new.levels = TRUE)) #calculates how wrong (on average) we expect to be (low values are good!) = 0.39
+
+####### the cross-validation on the train data gave an rmse of .5-ish - it is better on the test data #########
+
+
 
 # Bonus Question 1: What is the effect of changing the number of folds? Can you plot RMSE as a function of number of folds?
 # Bonus Question 2: compare the cross-validated predictive error against the actual predictive error on the test data
@@ -186,6 +254,23 @@ You want to evaluate:
 - how does the child fare compared to the model predictions at Visit 6? Is the child below or above expectations? (tip: use the predict() function on Bernie's data only and compare the prediction with the actual performance of the child)
 
 ```{r}
+#give Bernie (Child.ID = 67) his own dataframe
+Bernie <- filter(test_data, Child.ID == "67")
+
+
+#Make a dataframe with the TD kids' MLU at each visit and another for Bernie's MLU at each visit
+TD_skills <- subset(train_data, Diagnosis == "TD") %>% group_by(Visit) %>% summarise(AverageTD = mean(CHI_MLU))
+Bernie_skills <- subset(Bernie) %>% group_by(Visit) %>% summarize (Bernie = CHI_MLU)
+
+#combine the 2 dataframes from above and add a column with the difference in total numbers
+superior_Bernie <- cbind(TD_skills, Bernie_skills)
+superior_Bernie$Difference <- superior_Bernie$Bernie - superior_Bernie$AverageTD
+
+
+predictbernie <- predict(THEmodel, Bernie, allow.new.levels = TRUE)
+predictbernie
+#predict how good the model is at predicting for Bernie
+rmse(Bernie$CHI_MLU, predict(THEmodel, Bernie, allow.new.levels = TRUE))
 
 ```
 
